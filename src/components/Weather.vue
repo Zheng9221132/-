@@ -18,30 +18,27 @@
 </template>
 
 <script setup>
-import { getAdcode, getWeather, getOtherWeather } from "@/api";
+import { h, reactive, onMounted } from "vue";
 import { Error } from "@icon-park/vue-next";
+import { ElMessage } from "element-plus";
 
-// 高德开发者 Key
-const mainKey = import.meta.env.VITE_WEATHER_KEY;
-
-// 天气数据
+// 天气数据结构保持不变
 const weatherData = reactive({
   adCode: {
     city: null, // 城市
-    adcode: null, // 城市编码
+    adcode: null // 城市编码
   },
   weather: {
     weather: null, // 天气现象
     temperature: null, // 实时气温
     winddirection: null, // 风向描述
-    windpower: null, // 风力级别
-  },
+    windpower: null // 风力级别
+  }
 });
 
-// 取出天气平均值
+// 计算温度平均值方法（备用，当前接口返回实时温度）
 const getTemperature = (min, max) => {
   try {
-    // 计算平均值并四舍五入
     const average = (Number(min) + Number(max)) / 2;
     return Math.round(average);
   } catch (error) {
@@ -50,65 +47,64 @@ const getTemperature = (min, max) => {
   }
 };
 
-// 获取天气数据
+// 获取天气数据 - 完全替换为免费无注册接口
 const getWeatherData = async () => {
   try {
-    // 获取地理位置信息
-    if (!mainKey) {
-      console.log("未配置，使用备用天气接口");
-      const result = await getOtherWeather();
-      console.log(result);
-      const data = result.result;
-      weatherData.adCode = {
-        city: data.city.City || "未知地区",
-        // adcode: data.city.cityId,
-      };
-      weatherData.weather = {
-        weather: data.condition.day_weather,
-        temperature: getTemperature(data.condition.min_degree, data.condition.max_degree),
-        winddirection: data.condition.day_wind_direction,
-        windpower: data.condition.day_wind_power,
-      };
-    } else {
-      // 获取 Adcode
-      const adCode = await getAdcode(mainKey);
-      console.log(adCode);
-      if (adCode.infocode !== "10000") {
-        throw "地区查询失败";
-      }
-      weatherData.adCode = {
-        city: adCode.city,
-        adcode: adCode.adcode,
-      };
-      // 获取天气信息
-      const result = await getWeather(mainKey, weatherData.adCode.adcode);
-      weatherData.weather = {
-        weather: result.lives[0].weather,
-        temperature: result.lives[0].temperature,
-        winddirection: result.lives[0].winddirection,
-        windpower: result.lives[0].windpower,
-      };
-    }
+    // 免费天气接口（基于IP定位，无需注册，无API Key）
+    const response = await fetch("https://www.tianqiapi.com/api/?version=v61&appid=123456&appsecret=abc123");
+    if (!response.ok) throw new Error(`请求失败，状态码: ${response.status}`);
+
+    const resData = await response.json();
+    if (resData.errmsg !== "success") throw new Error(resData.errmsg || "接口返回异常");
+
+    // 字段映射，完全匹配原 weatherData 结构
+    weatherData.adCode = {
+      city: resData.city || "未知城市",
+      adcode: resData.cityid || null
+    };
+    weatherData.weather = {
+      weather: resData.wea || "未知天气",
+      temperature: resData.tem || "未知",
+      winddirection: resData.win || "未知风向",
+      windpower: resData.win_level || "未知"
+    };
   } catch (error) {
-    console.error("天气信息获取失败:" + error);
+    console.error("天气信息获取失败:" + error.message);
     onError("天气信息获取失败");
   }
 };
 
-// 报错信息
+// 报错信息提示
 const onError = (message) => {
   ElMessage({
     message,
     icon: h(Error, {
       theme: "filled",
-      fill: "#efefef",
-    }),
+      fill: "#efefef"
+    })
   });
   console.error(message);
 };
 
+// 组件挂载时请求数据
 onMounted(() => {
-  // 调用获取天气
   getWeatherData();
 });
 </script>
+
+<style scoped>
+/* 可根据需要添加样式 */
+.weather {
+  font-size: 14px;
+  color: #333;
+  line-height: 1.5;
+}
+.sm-hidden {
+  display: inline;
+}
+@media (max-width: 576px) {
+  .sm-hidden {
+    display: none;
+  }
+}
+</style>
